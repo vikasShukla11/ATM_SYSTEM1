@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced ATM System</title>
+    <style>
+        /* =================================
+           CSS: Best Looking Styles 
+           ================================= */
+        :root {
+            --primary: #007bff;
+            --secondary: #6c757d;
+            --success: #28a745;
+            --danger: #dc3545;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .atm-container {
+            background: var(--card-bg);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 450px;
+            padding: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .screen {
+            min-height: 250px;
+            background-color: #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
+            text-align: left;
+        }
+
+        .screen p {
+            font-size: 1.1em;
+            color: #333;
+            margin: 5px 0;
+        }
+
+        /* Forms Styling */
+        input[type="text"], input[type="password"], input[type="number"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        /* Button Styling */
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary { background-color: var(--secondary); }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .btn-danger { background-color: var(--danger); }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-success { background-color: var(--success); }
+        .btn-success:hover { background-color: #1e7e34; }
+
+        /* Mini Statement Specific Styling */
+        .mini-statement ul {
+            list-style: none;
+            padding: 0;
+        }
+        .mini-statement li {
+            background: #ffffff;
+            border-bottom: 1px solid #eee;
+            padding: 8px 0;
+            font-size: 0.9em;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+        }
+        .mini-statement li:last-child {
+            border-bottom: none;
+        }
+        .message-box {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        
+    </style>
+</head>
+<body>
+
+    <div class="atm-container">
+        <h1>ATM System 💰</h1>
+
+        <div id="app-screen" class="screen">
+            </div>
+        
+        <div id="message-area" class="message-box"></div>
+
+    </div>
+
+    <script>
+        /* =================================
+           JAVASCRIPT: Logic and Interactivity 
+           ================================= */
+
+        // --- GLOBAL VARIABLES ---
+        let accounts = {};
+        let currentUser = null;
+        let atmCash = 200000;
+        
+        const screen = document.getElementById('app-screen');
+        const messageArea = document.getElementById('message-area');
+
+        // --- HELPER FUNCTIONS ---
+        function getCurrentTime() {
+            return new Date().toLocaleString();
+        }
+
+        function displayMessage(msg, type = 'success') {
+            messageArea.textContent = msg;
+            messageArea.className = `message-box msg-${type}`;
+            setTimeout(() => {
+                messageArea.textContent = '';
+                messageArea.className = 'message-box';
+            }, 3000);
+        }
+
+        // --- ACCOUNT CLASS SIMULATION (Using JS Object) ---
+        function addTransaction(account, msg) {
+            if (!account.miniStatement) {
+                account.miniStatement = [];
+            }
+            // Keep only last 10 transactions
+            if (account.miniStatement.length >= 10) {
+                account.miniStatement.shift(); 
+            }
+            account.miniStatement.push(`${msg} | ${getCurrentTime()}`);
+            saveAccounts();
+        }
+
+        function withdraw(account, amount) {
+            amount = Number(amount);
+            if (amount <= 0 || isNaN(amount)) return false;
+            if (amount > account.balance) return false;
+            
+            account.balance -= amount;
+            addTransaction(account, `Withdraw: Rs ${amount.toFixed(2)}`);
+            return true;
+        }
+
+        function deposit(account, amount) {
+            amount = Number(amount);
+            if (amount > 0) {
+                account.balance += amount;
+                addTransaction(account, `Deposit: Rs ${amount.toFixed(2)}`);
+                return true;
+            }
+            return false;
+        }
+
+        // --- BANK/DATA MANAGEMENT ---
+        function loadAccounts() {
+            const data = localStorage.getItem('atmAccounts');
+            if (data) {
+                accounts = JSON.parse(data);
+            } else {
+                // Initial accounts (like C++ main function)
+                accounts['1111'] = { accNumber: '1111', pin: 1234, balance: 50000.00, miniStatement: [] };
+                accounts['2222'] = { accNumber: '2222', pin: 4321, balance: 30000.00, miniStatement: [] };
+                saveAccounts();
+            }
+        }
+
+        function saveAccounts() {
+            localStorage.setItem('atmAccounts', JSON.stringify(accounts));
+        }
+
+        function getAccount(accNum) {
+            return accounts[accNum] || null;
+        }
+
+        // --- ATM UI RENDERING & LOGIC ---
+
+        // -------------------------
+        // RENDER SCREENS
+        // -------------------------
+        function renderLogin() {
+            screen.innerHTML = `
+                <h2>ATM Login</h2>
+                <input type="text" id="accInput" placeholder="Account Number" required>
+                <input type="password" id="pinInput" placeholder="PIN" required>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="handleLogin()">Login</button>
+                    <button class="btn btn-secondary" onclick="displayMessage('Login cancelled.', 'secondary')">Cancel</button>
+                </div>
+            `;
+        }
+
+        function renderMenu() {
+            screen.innerHTML = `
+                <h2>Welcome, ${currentUser.accNumber}</h2>
+                <div class="btn-group" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <button class="btn" onclick="checkBalance()">Balance</button>
+                    <button class="btn" onclick="renderWithdraw()">Withdraw</button>
+                    <button class="btn" onclick="renderDeposit()">Deposit</button>
+                    <button class="btn" onclick="showMiniStatement()">Statement</button>
+                    <button class="btn" onclick="renderFastCash()">Fast Cash</button>
+                    <button class="btn" onclick="renderTransfer()">Transfer</button>
+                    <button class="btn" onclick="renderChangePin()">Change PIN</button>
+                    <button class="btn btn-danger" onclick="handleLogout()">Exit</button>
+                </div>
+            `;
+        }
+
+        function renderWithdraw() {
+            screen.innerHTML = `
+                <h2>Withdraw Money</h2>
+                <p>Current Balance: Rs ${currentUser.balance.toFixed(2)}</p>
+                <input type="number" id="amountInput" placeholder="Enter amount" min="100" required>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="handleWithdraw()">Confirm</button>
+                    <button class="btn btn-secondary" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+        
+        function renderDeposit() {
+            screen.innerHTML = `
+                <h2>Deposit Money</h2>
+                <input type="number" id="amountInput" placeholder="Enter amount" min="100" required>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="handleDeposit()">Confirm</button>
+                    <button class="btn btn-secondary" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+
+        function renderFastCash() {
+            const fastAmounts = [500, 1000, 2000, 5000];
+            let buttons = fastAmounts.map(amt => 
+                `<button class="btn" onclick="handleFastCash(${amt})">Rs ${amt}</button>`
+            ).join('');
+
+            screen.innerHTML = `
+                <h2>Fast Cash</h2>
+                <p>Current Balance: Rs ${currentUser.balance.toFixed(2)}</p>
+                <div class="btn-group" style="grid-template-columns: 1fr 1fr;">
+                    ${buttons}
+                    <button class="btn btn-secondary" style="grid-column: span 2;" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+
+        function renderTransfer() {
+            screen.innerHTML = `
+                <h2>Transfer Money</h2>
+                <input type="text" id="receiverAcc" placeholder="Receiver Account Number" required>
+                <input type="number" id="transferAmount" placeholder="Amount to Transfer" min="100" required>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="handleTransfer()">Confirm Transfer</button>
+                    <button class="btn btn-secondary" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+        
+        function renderChangePin() {
+            screen.innerHTML = `
+                <h2>Change PIN</h2>
+                <input type="password" id="newPin1" placeholder="Enter New PIN" minlength="4" maxlength="4" required>
+                <input type="password" id="newPin2" placeholder="Confirm New PIN" minlength="4" maxlength="4" required>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="handleChangePin()">Confirm Change</button>
+                    <button class="btn btn-secondary" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+
+        // -------------------------
+        // HANDLERS
+        // -------------------------
+
+        let loginAttempts = 0;
+        function handleLogin() {
+            const acc = document.getElementById('accInput').value;
+            const pin = parseInt(document.getElementById('pinInput').value);
+            const user = getAccount(acc);
+
+            if (user && user.pin === pin) {
+                currentUser = user;
+                displayMessage("Login Successful!", 'success');
+                renderMenu();
+                loginAttempts = 0;
+            } else {
+                loginAttempts++;
+                if (loginAttempts >= 3) {
+                    screen.innerHTML = `<h2 style="color:var(--danger);">❌ CARD BLOCKED: Too many wrong attempts!</h2><p>Please contact your bank.</p>`;
+                    displayMessage("Card Blocked!", 'error');
+                    // Optionally disable further login attempts
+                } else {
+                    displayMessage(`Invalid Account Number or PIN! (Attempt ${loginAttempts} of 3)`, 'error');
+                }
+            }
+        }
+        
+        function handleLogout() {
+            currentUser = null;
+            saveAccounts();
+            displayMessage("Thank you for using the ATM!", 'secondary');
+            renderLogin();
+        }
+
+        function checkBalance() {
+            screen.innerHTML = `
+                <h2>Balance Inquiry</h2>
+                <p style="font-size: 1.5em; font-weight: bold; color: var(--success);">
+                    Current Balance: Rs ${currentUser.balance.toFixed(2)}
+                </p>
+                <div class="btn-group" style="grid-template-columns: 1fr;">
+                    <button class="btn btn-secondary" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+
+        function handleWithdraw() {
+            const amount = Number(document.getElementById('amountInput').value);
+
+            if (amount > atmCash) {
+                displayMessage("ATM has insufficient cash!", 'error');
+                return;
+            }
+
+            if (withdraw(currentUser, amount)) {
+                atmCash -= amount;
+                displayMessage(`Withdrawal Successful. Please collect Rs ${amount.toFixed(2)}.`, 'success');
+                renderWithdraw(); // Refresh balance display
+            } else {
+                displayMessage("Withdrawal Failed: Insufficient Balance or Invalid Amount.", 'error');
+            }
+        }
+        
+        function handleDeposit() {
+            const amount = Number(document.getElementById('amountInput').value);
+            
+            if (deposit(currentUser, amount)) {
+                atmCash += amount;
+                displayMessage(`Deposit Successful. Rs ${amount.toFixed(2)} added.`, 'success');
+                renderDeposit();
+            } else {
+                displayMessage("Deposit Failed: Invalid Amount.", 'error');
+            }
+        }
+
+        function handleFastCash(amount) {
+            if (amount > atmCash) {
+                displayMessage("ATM has insufficient cash!", 'error');
+                return;
+            }
+
+            if (withdraw(currentUser, amount)) {
+                atmCash -= amount;
+                displayMessage(`Fast Cash Successful. Please collect Rs ${amount.toFixed(2)}.`, 'success');
+                renderMenu();
+            } else {
+                displayMessage("Fast Cash Failed: Insufficient Balance.", 'error');
+                renderFastCash();
+            }
+        }
+        
+        function handleTransfer() {
+            const receiverAcc = document.getElementById('receiverAcc').value;
+            const amount = Number(document.getElementById('transferAmount').value);
+
+            const receiver = getAccount(receiverAcc);
+
+            if (!receiver) {
+                displayMessage("Receiver Account Not Found!", 'error');
+                return;
+            }
+            if (receiver.accNumber === currentUser.accNumber) {
+                 displayMessage("Cannot transfer to the same account!", 'error');
+                return;
+            }
+            if (amount <= 0 || isNaN(amount)) {
+                displayMessage("Invalid amount!", 'error');
+                return;
+            }
+
+            if (withdraw(currentUser, amount)) {
+                deposit(receiver, amount); // Receiver gets the money
+
+                // Manual transaction logging for clear message
+                addTransaction(currentUser, `Transfer OUT to ${receiverAcc}: Rs ${amount.toFixed(2)}`);
+                addTransaction(receiver, `Transfer IN from ${currentUser.accNumber}: Rs ${amount.toFixed(2)}`);
+                saveAccounts();
+                
+                displayMessage(`Transfer Successful! Rs ${amount.toFixed(2)} sent to ${receiverAcc}.`, 'success');
+                renderMenu();
+            } else {
+                displayMessage("Transfer Failed: Insufficient Balance.", 'error');
+            }
+        }
+
+        function showMiniStatement() {
+            const statements = currentUser.miniStatement || [];
+            
+            let listHTML = '<ul>';
+            if (statements.length === 0) {
+                listHTML += '<li>No transactions found.</li>';
+            } else {
+                statements.slice().reverse().forEach(t => { // Reverse to show latest first
+                    listHTML += `<li><span>${t.split('|')[0]}</span> <span>${t.split('|')[1]}</span></li>`;
+                });
+            }
+            listHTML += '</ul>';
+
+            screen.innerHTML = `
+                <h2>Mini Statement</h2>
+                <div class="mini-statement">
+                    ${listHTML}
+                </div>
+                <div class="btn-group" style="grid-template-columns: 1fr;">
+                    <button class="btn btn-secondary" onclick="renderMenu()">Back to Menu</button>
+                </div>
+            `;
+        }
+
+        function handleChangePin() {
+            const p1 = Number(document.getElementById('newPin1').value);
+            const p2 = Number(document.getElementById('newPin2').value);
+
+            if (p1 === p2 && String(p1).length === 4) {
+                currentUser.pin = p1;
+                addTransaction(currentUser, "PIN Changed");
+                saveAccounts();
+                displayMessage("PIN changed successfully!", 'success');
+                renderMenu();
+            } else {
+                displayMessage("PIN Mismatch or Invalid format (must be 4 digits).", 'error');
+            }
+        }
+
+        // --- INITIALIZATION ---
+        loadAccounts(); // Load data from local storage
+        renderLogin();  // Start the ATM application
+
+    </script>
+</body>
+</html>
